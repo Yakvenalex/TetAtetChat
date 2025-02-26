@@ -1,0 +1,13 @@
+aiogram==3.18.0
+aiogram_dialog==2.3.1
+fastapi==0.115.0
+pydantic==2.9.2
+uvicorn==0.31.0
+jinja2==3.1.4
+pydantic_settings==2.5.2
+aiosqlite==0.20.0
+alembic==1.13.3
+loguru==0.7.2
+SQLAlchemy==2.0.35
+pyjwt==2.10.1
+redis==5.2.1
