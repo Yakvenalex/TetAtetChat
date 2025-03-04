@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     REDIS_PORT: int
     REDIS_PASSWORD: str
     REDIS_HOST: str
+    FRONT_URL: str
+    SECRET_KEY: str
+    CENTRIFUGO_API_KEY: str
+    CENTRIFUGO_URL: str
+    SOCKET_URL: str
 
     @property
     def hook_url(self) -> str:
