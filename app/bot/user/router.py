@@ -31,7 +31,8 @@ async def cmd_start(message: Message, dialog_manager: DialogManager,
         await dialog_manager.start(FormState.nickname, mode=StartMode.RESET_STACK)
     else:
         await message.answer("Вам открыт доступ к чату! Для работы воспользуйтесь клавиатурой ниже.",
-                             reply_markup=main_user_kb())
+                             reply_markup=main_user_kb(user_id=message.from_user.id,
+                                                       sender=user_info.nickname))
 
 
 @router.callback_query(F.data == "my_profile")
@@ -54,7 +55,7 @@ async def cmd_profile(call: CallbackQuery, session_without_commit: AsyncSession)
 ✏️ Чтобы изменить данные, воспользуйтесь клавиатурой ниже.
 """
 
-    await call.message.edit_text(profile_text, reply_markup=profile_kb())
+    await call.message.edit_text(profile_text, reply_markup=profile_kb(call.from_user.id, user_info.nickname))
 
 
 @router.callback_query(F.data == "edit_nickname")
@@ -70,7 +71,8 @@ async def cmd_edit_nickname(message: Message, state: FSMContext, session_with_co
     await user_dao.update(filters=UserIdSchema(id=message.from_user.id),
                           values=NickSchema(nickname=message.text))
     await state.clear()
-    await message.answer("Ваш никнейм изменен на: " + message.text, reply_markup=main_user_kb(message.from_user.id))
+    await message.answer("Ваш никнейм изменен на: " + message.text,
+                         reply_markup=main_user_kb(message.from_user.id, message.text))
 
 
 @router.callback_query(F.data == "edit_age")
@@ -89,17 +91,19 @@ async def cmd_edit_age(message: Message, state: FSMContext, session_with_commit:
         await user_dao.update(filters=UserIdSchema(id=message.from_user.id),
                               values=AgeSchema(age=int(message.text)))
         await state.clear()
+        user_data = await user_dao.find_one_or_none_by_id(message.from_user.id)
         await message.answer("Ваш возраст изменен на: " + message.text,
-                             reply_markup=main_user_kb(message.from_user.id))
+                             reply_markup=main_user_kb(message.from_user.id, user_data.nicknmame))
     except ValueError:
         await message.edit_text("Введенное значение не является числом. Пожалуйста, введите число.")
         await state.set_state(AgeState.age)
 
 
-@router.callback_query(F.data == "about_us")
+@router.callback_query(F.data.startswith("about_us_"))
 async def cmd_about(call: CallbackQuery):
     await call.answer()
-
+    user_id = call.from_user.id
+    nickname = call.data.replace("about_us_", "")
     text = """
 <b>Добро пожаловать в чат Тет-а-тет!</b>
 
@@ -122,4 +126,4 @@ async def cmd_about(call: CallbackQuery):
 <i>Приятного общения!</i>
 """
 
-    await call.message.edit_text(text, reply_markup=main_user_kb())
+    await call.message.edit_text(text, reply_markup=main_user_kb(user_id, nickname))

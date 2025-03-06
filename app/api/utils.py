@@ -14,7 +14,7 @@ async def send_msg(data: dict, channel_name: str) -> bool:
         "params": {"channel": channel_name, "data": json_data}
     }
     headers = {"X-API-Key": settings.CENTRIFUGO_API_KEY}
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=90) as client:
         response = await client.post(url=settings.CENTRIFUGO_URL,
                                      json=payload,
                                      headers=headers)

@@ -50,7 +50,9 @@ async def find_partner(
                             "id": partner["id"],
                             "nickname": partner["nickname"]
                         },
-                        "token": user_token
+                        "token": user_token,
+                        "sender": user_nickname,
+                        "user_id": user.id
                     }
 
     # Если подходящей комнаты не нашлось, продолжаем поиск или создание новой комнаты
@@ -130,7 +132,9 @@ async def find_partner(
                 "status": "matched",
                 "room_key": room_key_str,
                 "partner": partner,
-                "token": user_token
+                "token": user_token,
+                "sender": user_nickname,
+                "user_id": user.id
             }
 
     # Если подходящей комнаты не нашлось, создаем новую с уникальным идентификатором
@@ -165,7 +169,9 @@ async def find_partner(
         "room_key": new_room_key,
         "partner": None,
         "message": "Ожидаем подходящего партнера",
-        "token": user_token
+        "token": user_token,
+        "sender": user_nickname,
+        "user_id": user.id
     }
 
 
@@ -178,6 +184,7 @@ async def room_status(
     # Получаем данные о комнате из Redis
     room_data = await redis_client.get(key)
     if not room_data:
+        print(f"STATUS: Комната не найдена!")
         raise HTTPException(status_code=404, detail="Комната не найдена")
 
     room_info = json.loads(room_data)
@@ -193,6 +200,7 @@ async def room_status(
         if not partner:
             raise HTTPException(status_code=500, detail="Ошибка при поиске партнера")
 
+        print(f"STATUS: matched!")
         return {
             "status": "matched",
             "room_key": key,
@@ -204,6 +212,7 @@ async def room_status(
 
     # Если в комнате только один участник, значит ожидание
     elif len(participants) == 1:
+        print(f"STATUS: waiting!")
         return {
             "room_key": key,
             "status": "waiting",
@@ -212,11 +221,20 @@ async def room_status(
 
     # Если комната пуста или участников больше 2, значит комната закрыта
     else:
+        print(f"STATUS: closed!")
         return {
             "room_key": key,
             "status": "closed",
             "message": "Комната закрыта"
         }
+
+
+@router.post("/clear_room/{room_id}")
+async def clear_room(room_id: str, redis_client: Redis = Depends(get_redis_db)):
+    # Асинхронно удаляем ключ, связанный с room_id
+    print(room_id)
+    await redis_client.unlink(room_id)
+    return {"message": f"Ключ для комнаты {room_id} удален"}
 
 
 @router.post("/clear_redis")
@@ -228,8 +246,9 @@ async def clear_redis(redis_client: Redis = Depends(get_redis_db)):
 
 @router.post("/send-msg/{room_id}")
 async def vote(room_id: str, msg: SMessge):
+    data = msg.model_dump()
     is_sent = await send_msg(
-        data=msg.model_dump(),
+        data=data,
         channel_name=room_id
     )
     return {"status": "ok" if is_sent else "failed"}

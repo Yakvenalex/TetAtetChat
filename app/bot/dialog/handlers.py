@@ -38,5 +38,5 @@ async def on_confirmation(callback: CallbackQuery, button: Button, dialog_manage
                       age=dialog_manager.dialog_data["age"])
     await UserDAO(session).add(user)
     text = "Спасибо, что ответили на все вопросы! Теперь вам доступен доступ к чату."
-    await callback.message.answer(text, reply_markup=main_user_kb(user_id))
+    await callback.message.answer(text, reply_markup=main_user_kb(user_id, dialog_manager.dialog_data["nickname"]))
     await dialog_manager.done()

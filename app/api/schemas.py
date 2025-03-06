@@ -9,5 +9,6 @@ class SPartner(BaseModel):
 
 
 class SMessge(BaseModel):
-    nickname: str
+    sender: str
+    user_id: int
     message: str
