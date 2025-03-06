@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     CENTRIFUGO_API_KEY: str
     CENTRIFUGO_URL: str
     SOCKET_URL: str
+    REDIS_SSL: bool
 
     @property
     def hook_url(self) -> str:

@@ -1,20 +1,18 @@
 from contextlib import asynccontextmanager
-
-from starlette.middleware.cors import CORSMiddleware
-
+from fastapi.middleware.cors import CORSMiddleware
 from app.bot.create_bot import dp, start_bot, bot, stop_bot
 from app.config import settings
 from aiogram.types import Update
 from fastapi import FastAPI, Request
 from loguru import logger
-from app.redis_config import test_redis_connection
 from app.api.router import router as api_router
+from app.redis_dao.manager import redis_manager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Бот запущен...")
-    await test_redis_connection()
+    await redis_manager.connect()
     await start_bot()
     app.include_router(api_router)
     webhook_url = settings.hook_url
@@ -25,9 +23,11 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Бот остановлен...")
     await stop_bot()
+    await redis_manager.close()
 
 
 app = FastAPI(lifespan=lifespan)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
