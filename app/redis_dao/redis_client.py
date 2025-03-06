@@ -55,3 +55,47 @@ class RedisClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Автоматически закрывает подключение при выходе из контекста."""
         await self.close()
+
+    async def delete_key(self, key: str):
+        """Удаляет ключ из Redis."""
+        await self._client.delete(key)
+        logger.info(f"Ключ {key} удален")
+
+    async def delete_keys_by_prefix(self, prefix: str):
+        """Удаляет ключи, начинающиеся с указанного префикса."""
+        keys = await self._client.keys(prefix + '*')
+        if keys:
+            await self._client.delete(*keys)
+            logger.info(f"Удалены ключи, начинающиеся с {prefix}")
+
+    async def delete_all_keys(self):
+        """Удаляет все ключи из текущей базы данных Redis."""
+        await self._client.flushdb()
+        logger.info("Удалены все ключи из текущей базы данных")
+
+    async def get_value(self, key: str):
+        """Возвращает значение ключа из Redis."""
+        value = await self._client.get(key)
+        if value:
+            return value
+        else:
+            logger.info(f"Ключ {key} не найден")
+            return None
+
+    async def set_value(self, key: str, value: str):
+        """Устанавливает значение ключа в Redis."""
+        await self._client.set(key, value)
+        logger.info(f"Установлено значение ключа {key}")
+
+    async def set_value_with_ttl(self, key: str, value: str, ttl: int):
+        """Устанавливает значение ключа с временем жизни в Redis."""
+        await self._client.setex(key, ttl, value)
+        logger.info(f"Установлено значение ключа {key} с TTL {ttl}")
+
+    async def exists(self, key: str) -> bool:
+        """Проверяет, существует ли ключ в Redis."""
+        return await self._client.exists(key)
+
+    async def get_keys(self, pattern: str = '*'):
+        """Возвращает список ключей, соответствующих шаблону."""
+        return await self._client.keys(pattern)
