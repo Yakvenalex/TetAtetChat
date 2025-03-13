@@ -1,34 +1,67 @@
-import json
-from loguru import logger
+from fastapi import Depends
 from app.config import settings
 from app.redis_dao.redis_client import RedisClient
-from redis.asyncio import Redis
-
-redis_manager = RedisClient(host=settings.REDIS_HOST,
-                            port=settings.REDIS_PORT,
-                            password=settings.REDIS_PASSWORD,
-                            ssl_flag=settings.REDIS_SSL)
+from app.redis_dao.custom_redis import CustomRedis
+from functools import wraps
+from typing import Callable, Awaitable, Any
+from loguru import logger
 
 
-async def get_redis() -> Redis:
+redis_manager = RedisClient(
+    host=settings.REDIS_HOST,
+    port=settings.REDIS_PORT,
+    password=settings.REDIS_PASSWORD,
+    ssl_flag=settings.REDIS_SSL,
+)
+
+
+async def get_redis() -> CustomRedis:
     """Функция зависимости для получения клиента Redis"""
     return redis_manager.get_client()
 
 
-async def get_cached_data(redis_client: Redis, cache_key: str, fetch_data_func, *args, **kwargs):
+def cached(cache_key: str, ttl: int = 1800):
     """
-    Получает данные из кэша Redis или из БД, если их нет в кэше.
+    Декоратор для кэширования результатов функции.
+
+    Args:
+        cache_key: Ключ для кэширования данных. Поддерживает форматирование строки с использованием параметров функции.
+        ttl: Время жизни кэша в секундах (по умолчанию 30 минут).
     """
-    cached_data = await redis_client.get(cache_key)
 
-    if cached_data:
-        logger.info("Беру с кэша")
-        return json.loads(cached_data)
-    else:
-        logger.info("Помещаю в кэш")
-        data = await fetch_data_func(*args, **kwargs)
+    def decorator(func: Callable[..., Awaitable[Any]]):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            try:
+                # Форматируем ключ кэша, используя все доступные параметры
+                formatted_key = cache_key.format(**kwargs)
+            except KeyError as e:
+                logger.error(f"Ошибка форматирования ключа кэша: {e}")
+                # В случае ошибки форматирования возвращаем результат без кэширования
+                return await func(*args, **kwargs)
+            except Exception as e:
+                logger.error(f"Неожиданная ошибка при работе с кэшем: {e}")
+                return await func(*args, **kwargs)
 
-        # Сохраняем данные в кэше с временем жизни 30 минут
-        await redis_client.setex(cache_key, 1800, json.dumps(data))
+            try:
+                redis = await get_redis()
+                result = await redis.get_cached_data(
+                    cache_key=formatted_key,
+                    fetch_data_func=func,
+                    ttl=ttl,
+                    *args,
+                    **kwargs,
+                )
+                if result is None:
+                    logger.warning(
+                        f"Получено пустое значение из кэша для ключа {formatted_key}"
+                    )
+                return result
+            except Exception as e:
+                logger.error(f"Ошибка при работе с Redis: {e}")
+                # В случае ошибки Redis возвращаем результат без кэширования
+                return await func(*args, **kwargs)
 
-        return data
+        return wrapper
+
+    return decorator

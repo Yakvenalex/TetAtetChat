@@ -5,11 +5,11 @@ from datetime import datetime
 from typing import List, Dict, Any
 from fastapi import HTTPException
 from loguru import logger
-from redis.asyncio import Redis
 import jwt
 import httpx
 from app.config import settings
 from app.dao.dao import UserDAO
+from app.redis_dao.custom_redis import CustomRedis
 
 
 async def send_msg(data: dict, channel_name: str) -> bool:
@@ -17,13 +17,13 @@ async def send_msg(data: dict, channel_name: str) -> bool:
     json_data = json.dumps(data)
     payload = {
         "method": "publish",
-        "params": {"channel": channel_name, "data": json_data}
+        "params": {"channel": channel_name, "data": json_data},
     }
     headers = {"X-API-Key": settings.CENTRIFUGO_API_KEY}
     async with httpx.AsyncClient(timeout=90) as client:
-        response = await client.post(url=settings.CENTRIFUGO_URL,
-                                     json=payload,
-                                     headers=headers)
+        response = await client.post(
+            url=settings.CENTRIFUGO_URL, json=payload, headers=headers
+        )
         return response.status_code == 200
 
 
@@ -34,38 +34,41 @@ async def generate_client_token(user_id, secret_key):
     # Создаем полезную нагрузку токена
     payload = {
         "sub": str(user_id),  # Идентификатор пользователя
-        "exp": exp  # Время истечения
+        "exp": exp,  # Время истечения
     }
 
     # Генерируем токен с использованием HMAC SHA-256
     return jwt.encode(payload, secret_key, algorithm="HS256")
 
 
-async def create_new_room(user_id: int,
-                          user_nickname: str,
-                          user_gender: str,
-                          user_age: int,
-                          find_gender: str,
-                          age_from: int,
-                          age_to: int,
-                          redis_client: Redis):
+async def create_new_room(
+    user_id: int,
+    user_nickname: str,
+    user_gender: str,
+    user_age: int,
+    find_gender: str,
+    age_from: int,
+    age_to: int,
+    redis_client: CustomRedis,
+):
     new_room_key = f"{find_gender}_{uuid.uuid4().hex[:10]}"
     user_token = await generate_client_token(user_id, settings.SECRET_KEY)
 
-    new_room_data = {"partners": [
-        {
-            "id": user_id,
-            "nickname": user_nickname,
-            "gender": user_gender,
-            "age": user_age,
-            "find_gender": find_gender,
-            "age_from": age_from,
-            "age_to": age_to,
-            "token": user_token
-        }
-    ],
+    new_room_data = {
+        "partners": [
+            {
+                "id": user_id,
+                "nickname": user_nickname,
+                "gender": user_gender,
+                "age": user_age,
+                "find_gender": find_gender,
+                "age_from": age_from,
+                "age_to": age_to,
+                "token": user_token,
+            }
+        ],
         "created_at": datetime.now().isoformat(),
-        "room_key": new_room_key
+        "room_key": new_room_key,
     }
 
     await redis_client.set(new_room_key, json.dumps(new_room_data))
@@ -79,8 +82,17 @@ async def create_new_room(user_id: int,
     }
 
 
-async def add_user_to_room(room, user_id, user_nickname, user_gender, user_age, find_gender, age_from, age_to,
-                           redis_client):
+async def add_user_to_room(
+    room,
+    user_id,
+    user_nickname,
+    user_gender,
+    user_age,
+    find_gender,
+    age_from,
+    age_to,
+    redis_client,
+):
     partners = room.get("partners", [])
     new_user_token = await generate_client_token(user_id, settings.SECRET_KEY)
     # Добавляем текущего пользователя в комнату
@@ -92,7 +104,7 @@ async def add_user_to_room(room, user_id, user_nickname, user_gender, user_age, 
         "find_gender": find_gender,
         "age_from": age_from,
         "age_to": age_to,
-        "token": new_user_token
+        "token": new_user_token,
     }
     partners.append(new_partner)
 
@@ -107,11 +119,13 @@ async def add_user_to_room(room, user_id, user_nickname, user_gender, user_age, 
         "message": "Партнер найден",
         "token": new_user_token,
         "sender": user_nickname,
-        "user_id": user_id
+        "user_id": user_id,
     }
 
 
-async def refund_partner(room_key, user_id, user_nickname, status="matched", message="Партнер найден"):
+async def refund_partner(
+    room_key, user_id, user_nickname, status="matched", message="Партнер найден"
+):
     new_user_token = await generate_client_token(user_id, settings.SECRET_KEY)
     return {
         "status": status,
@@ -119,7 +133,7 @@ async def refund_partner(room_key, user_id, user_nickname, status="matched", mes
         "message": message,
         "token": new_user_token,
         "sender": user_nickname,
-        "user_id": user_id
+        "user_id": user_id,
     }
 
 
@@ -127,10 +141,14 @@ async def get_user_info(session, user_id):
     full_user_data = await UserDAO(session).find_one_or_none_by_id(user_id)
     if not full_user_data:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
-    return {"nickname": full_user_data.nickname, "gender": full_user_data.gender, "age": full_user_data.age}
+    return {
+        "nickname": full_user_data.nickname,
+        "gender": full_user_data.gender,
+        "age": full_user_data.age,
+    }
 
 
-async def get_all_rooms_gender(redis_client: Redis) -> List[Dict[str, Any]]:
+async def get_all_rooms_gender(redis_client: CustomRedis) -> List[Dict[str, Any]]:
     """
     Возвращает все данные по ключам.
 
@@ -156,16 +174,16 @@ async def get_all_rooms_gender(redis_client: Redis) -> List[Dict[str, Any]]:
 
 
 def is_match(
-        user_gender: str,
-        user_find_gender: str,
-        user_age: int,
-        user_age_from: int,
-        user_age_to: int,
-        partner_gender: str,
-        partner_find_gender: str,
-        partner_age: int,
-        partner_age_from: int,
-        partner_age_to: int
+    user_gender: str,
+    user_find_gender: str,
+    user_age: int,
+    user_age_from: int,
+    user_age_to: int,
+    partner_gender: str,
+    partner_find_gender: str,
+    partner_age: int,
+    partner_age_from: int,
+    partner_age_to: int,
 ) -> bool:
     """
     Проверяет, подходят ли пользователь и партнер друг другу по полу и возрасту.
@@ -184,15 +202,17 @@ def is_match(
     """
     # Проверка по полу
     is_gender_match = (
-            (partner_find_gender == "any" or partner_find_gender == user_gender) and
-            (user_find_gender == "any" or user_find_gender == partner_gender)  # Текущий пользователь ищет партнера
-    )
+        partner_find_gender == "any" or partner_find_gender == user_gender
+    ) and (
+        user_find_gender == "any" or user_find_gender == partner_gender
+    )  # Текущий пользователь ищет партнера
 
     # Проверка по возрасту
     is_age_match = (
-            (partner_age_from <= user_age <= partner_age_to) and  # Возраст пользователя подходит партнеру
-            (user_age_from <= partner_age <= user_age_to)  # Возраст партнера подходит пользователю
-    )
+        partner_age_from <= user_age <= partner_age_to
+    ) and (  # Возраст пользователя подходит партнеру
+        user_age_from <= partner_age <= user_age_to
+    )  # Возраст партнера подходит пользователю
 
     # Возвращаем True, если оба условия выполнены
     return is_gender_match and is_age_match

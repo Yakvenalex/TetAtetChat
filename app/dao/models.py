@@ -1,6 +1,4 @@
 from sqlalchemy import BigInteger
-from sqlalchemy.dialects.sqlite import JSON
-
 from app.dao.database import Base
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,6 +13,3 @@ class User(Base):
     nickname: Mapped[str]
     gender: Mapped[str]
     age: Mapped[int]
-    is_available: Mapped[bool] = mapped_column(default=True)
-    current_room: Mapped[int | None]
-    preferences: Mapped[dict] = mapped_column(JSON)
