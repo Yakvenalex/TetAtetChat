@@ -8,37 +8,40 @@ from app.bot.dialog.state import FormState
 from app.bot.kbs import main_user_kb, profile_kb
 from app.bot.schemas import UserIdSchema, NickSchema, AgeSchema
 from app.dao.dao import UserDAO
-from aiogram.fsm.state import StatesGroup, State
-
-
-class AgeState(StatesGroup):
-    age = State()
-
-
-class NickState(StatesGroup):
-    nickname = State()
+from app.bot.user.state import AgeState, NickState
 
 
 router = Router()
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, dialog_manager: DialogManager,
-                    session_without_commit: AsyncSession, state: FSMContext):
+async def cmd_start(
+    message: Message,
+    dialog_manager: DialogManager,
+    session_without_commit: AsyncSession,
+    state: FSMContext,
+):
     await state.clear()
-    user_info = await UserDAO(session_without_commit).find_one_or_none_by_id(message.from_user.id)
+    user_info = await UserDAO(session_without_commit).find_one_or_none_by_id(
+        message.from_user.id
+    )
     if user_info is None:
         await dialog_manager.start(FormState.nickname, mode=StartMode.RESET_STACK)
     else:
-        await message.answer("Вам открыт доступ к чату! Для работы воспользуйтесь клавиатурой ниже.",
-                             reply_markup=main_user_kb(user_id=message.from_user.id,
-                                                       sender=user_info.nickname))
+        await message.answer(
+            "Вам открыт доступ к чату! Для работы воспользуйтесь клавиатурой ниже.",
+            reply_markup=main_user_kb(
+                user_id=message.from_user.id, sender=user_info.nickname
+            ),
+        )
 
 
 @router.callback_query(F.data == "my_profile")
 async def cmd_profile(call: CallbackQuery, session_without_commit: AsyncSession):
     await call.answer()
-    user_info = await UserDAO(session_without_commit).find_one_or_none_by_id(call.from_user.id)
+    user_info = await UserDAO(session_without_commit).find_one_or_none_by_id(
+        call.from_user.id
+    )
 
     gender_text = "👨 Мужской" if user_info.gender == "man" else "👩 Женский"
 
@@ -55,7 +58,9 @@ async def cmd_profile(call: CallbackQuery, session_without_commit: AsyncSession)
 ✏️ Чтобы изменить данные, воспользуйтесь клавиатурой ниже.
 """
 
-    await call.message.edit_text(profile_text, reply_markup=profile_kb(call.from_user.id, user_info.nickname))
+    await call.message.edit_text(
+        profile_text, reply_markup=profile_kb(call.from_user.id, user_info.nickname)
+    )
 
 
 @router.callback_query(F.data == "edit_nickname")
@@ -66,13 +71,19 @@ async def cmd_about(call: CallbackQuery, state: FSMContext):
 
 
 @router.message(F.text, NickState.nickname)
-async def cmd_edit_nickname(message: Message, state: FSMContext, session_with_commit: AsyncSession):
+async def cmd_edit_nickname(
+    message: Message, state: FSMContext, session_with_commit: AsyncSession
+):
     user_dao = UserDAO(session_with_commit)
-    await user_dao.update(filters=UserIdSchema(id=message.from_user.id),
-                          values=NickSchema(nickname=message.text))
+    await user_dao.update(
+        filters=UserIdSchema(id=message.from_user.id),
+        values=NickSchema(nickname=message.text),  # type: ignore
+    )
     await state.clear()
-    await message.answer("Ваш никнейм изменен на: " + message.text,
-                         reply_markup=main_user_kb(message.from_user.id, message.text))
+    await message.answer(
+        "Ваш никнейм изменен на: " + message.text,
+        reply_markup=main_user_kb(message.from_user.id, message.text),
+    )
 
 
 @router.callback_query(F.data == "edit_age")
@@ -83,19 +94,27 @@ async def cmd_age(call: CallbackQuery, state: FSMContext):
 
 
 @router.message(F.text, AgeState.age)
-async def cmd_edit_age(message: Message, state: FSMContext, session_with_commit: AsyncSession):
+async def cmd_edit_age(
+    message: Message, state: FSMContext, session_with_commit: AsyncSession
+):
     user_dao = UserDAO(session_with_commit)
 
     try:
         int(message.text)
-        await user_dao.update(filters=UserIdSchema(id=message.from_user.id),
-                              values=AgeSchema(age=int(message.text)))
+        await user_dao.update(
+            filters=UserIdSchema(id=message.from_user.id),
+            values=AgeSchema(age=int(message.text)),
+        )
         await state.clear()
         user_data = await user_dao.find_one_or_none_by_id(message.from_user.id)
-        await message.answer("Ваш возраст изменен на: " + message.text,
-                             reply_markup=main_user_kb(message.from_user.id, user_data.nicknmame))
+        await message.answer(
+            "Ваш возраст изменен на: " + message.text,
+            reply_markup=main_user_kb(message.from_user.id, user_data.nicknmame),
+        )
     except ValueError:
-        await message.edit_text("Введенное значение не является числом. Пожалуйста, введите число.")
+        await message.edit_text(
+            "Введенное значение не является числом. Пожалуйста, введите число."
+        )
         await state.set_state(AgeState.age)
 
 

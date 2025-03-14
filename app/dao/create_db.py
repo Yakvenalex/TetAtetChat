@@ -13,8 +13,8 @@ async def create_users_table():
             last_name TEXT,
             nickname TEXT NOT NULL,
             gender TEXT NOT NULL,
-            age INTEGER NOT NULL,
-        )
+            age INTEGER NOT NULL
+        );
         """
         )
         await db.commit()
